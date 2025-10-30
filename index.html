@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beer Game — Multiplayer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family:sans-serif;background:#0e1420;color:#e6edf3;margin:0;padding:0}
+    header{background:#121a2a;padding:10px 20px;font-weight:bold}
+    main{padding:20px;max-width:1200px;margin:auto}
+    section{background:#151d2f;padding:15px;border-radius:10px;margin-bottom:15px}
+    button{padding:8px 16px;border:0;border-radius:6px;cursor:pointer;margin:3px}
+    input,select{padding:6px 10px;border-radius:6px;border:1px solid #333;background:#0f1724;color:white}
+    .roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+    .role{border:1px solid #2a3245;border-radius:10px;padding:10px}
+    pre{background:#0b111c;border-radius:8px;padding:10px;overflow:auto;height:150px}
+    canvas{background:#0b111c;border-radius:8px}
+  </style>
+</head>
+<body>
+<header>Beer Game — Multiplayer + Exportação CSV</header>
+<main>
+  <section>
+    <h3>Configuração do Jogo</h3>
+    <label>Sala:</label> <input id="room" placeholder="ex: turma1"/> 
+    <button id="createRoom">Criar sala</button>
+    <button id="joinRoom">Entrar</button>
+    <p id="roomInfo"></p>
+  </section>
+
+  <section>
+    <h3>Controle</h3>
+    <label>Semanas:</label><input id="weeks" type="number" value="30"/> 
+    <label>Lead Time:</label><input id="lead" type="number" value="2"/> 
+    <label>Demanda inicial:</label><input id="demand" type="number" value="4"/> 
+    <button id="start">Iniciar</button>
+    <button id="next">Próxima Semana</button>
+    <button id="export">Exportar CSV</button>
+  </section>
+
+  <section>
+    <h3>Jogadores</h3>
+    <div class="roles" id="roles"></div>
+  </section>
+
+  <section>
+    <h3>Gráficos</h3>
+    <canvas id="chartInv"></canvas>
+  </section>
+
+  <section>
+    <h3>Log</h3>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+// ===== Multiplayer e Simulação =====
+const ROLES=["Varejista","Atacadista","Distribuidor","Fábrica"];
+let state={week:0,data:[],inv:[[],[],[],[]],room:null,started:false};
+let chart;
+
+function log(t){
+  const l=document.getElementById('log');
+  l.textContent+=t+'\\n';
+  l.scrollTop=l.scrollHeight;
+}
+
+function renderRoles(){
+  document.getElementById('roles').innerHTML=ROLES.map((r,i)=>
+    `<div class='role'>
+       <b>${r}</b><br>
+       Estoque: <span id='inv${i}'>12</span><br>
+       Pedido: <input id='ord${i}' type='number' value='4'/>
+     </div>`).join('');
+}
+
+function updateInv(){
+  for(let i=0;i<4;i++){
+    document.getElementById('inv'+i).textContent=state.inv[i][state.week]??12;
+  }
+}
+
+function startGame(){
+  state.week=0;
+  state.data=[];
+  for(let i=0;i<4;i++){ state.inv[i]=[12]; }
+  state.started=true;
+  renderRoles();
+  updateChart();
+  log('Jogo iniciado');
+}
+
+function nextWeek(){
+  if(!state.started) return;
+  state.week++;
+  const d=parseInt(document.getElementById('demand').value)||4;
+  const newInv=[];
+  for(let i=0;i<4;i++){
+    const o=parseInt(document.getElementById('ord'+i').value)||0;
+    newInv[i]=(state.inv[i][state.week-1]??12)+o-d;
+    state.inv[i].push(newInv[i]);
+  }
+  updateInv();
+  updateChart();
+  log('Semana '+state.week+': demanda='+d+' pedidos='+ROLES.map((_,i)=>document.getElementById('ord'+i).value).join('/'));
+}
+
+function updateChart(){
+  const ctx=document.getElementById('chartInv');
+  if(chart) chart.destroy();
+  chart=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:Array.from({length:state.week+1},(_,i)=>i),
+      datasets:ROLES.map((r,i)=>({label:r,data:state.inv[i]}))
+    },
+    options:{plugins:{legend:{position:'bottom'}}}
+  });
+}
+
+function exportCSV(){
+  let csv='Semana,'+ROLES.join(',')+'\\n';
+  for(let w=0;w<=state.week;w++){
+    csv+=w+','+ROLES.map((_,i)=>state.inv[i][w]??'').join(',')+'\\n';
+  }
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='beer_game_'+(state.room||'local')+'.csv';
+  a.click();
+}
+
+document.getElementById('start').onclick=startGame;
+document.getElementById('next').onclick=nextWeek;
+document.getElementById('export').onclick=exportCSV;
+
+renderRoles();
+</script>
+</body>
+</html>
